@@ -1,0 +1,470 @@
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Sign Language Detection</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+                font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            }
+
+            body {
+                background: #f0f2f5;
+                padding: 20px;
+            }
+
+            .container {
+                max-width: 1200px;
+                margin: 0 auto;
+            }
+
+            .header {
+                background: #ffffff;
+                padding: 20px;
+                border-radius: 10px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                margin-bottom: 20px;
+            }
+
+            .header h1 {
+                color: #1a73e8;
+                margin-bottom: 15px;
+            }
+
+            .controls {
+                display: flex;
+                gap: 20px;
+                align-items: center;
+                margin-bottom: 15px;
+            }
+
+            .model-selector {
+                padding: 8px 15px;
+                border: 2px solid #1a73e8;
+                border-radius: 5px;
+                font-size: 16px;
+                color: #1a73e8;
+                background: white;
+                cursor: pointer;
+                min-width: 200px;
+            }
+
+            .status {
+                padding: 5px 10px;
+                border-radius: 5px;
+                font-weight: 500;
+            }
+
+            .status.active {
+                background: #e6f4ea;
+                color: #1e8e3e;
+            }
+
+            .status.inactive {
+                background: #fce8e6;
+                color: #d93025;
+            }
+
+            .main-content {
+                display: grid;
+                grid-template-columns: 1fr 300px;
+                gap: 20px;
+            }
+
+            .video-container {
+                background: #ffffff;
+                padding: 20px;
+                border-radius: 10px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                width: 100%;
+                max-width: 800px;
+                margin: 0 auto;
+            }
+        
+            #videoElement {
+                width: 100%;
+                height: auto;
+                border-radius: 5px;
+                margin-bottom: 15px;
+                background-color: #000; /* Add background color to make it visible when loading */
+                min-height: 360px; /* Ensure minimum height while loading */
+            }
+
+            .detection-text {
+                background: #f8f9fa;
+                padding: 15px;
+                border-radius: 5px;
+                min-height: 100px;
+                border: 1px solid #dee2e6;
+            }
+
+            .instructions {
+                background: #ffffff;
+                padding: 20px;
+                border-radius: 10px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+
+            .instructions h2 {
+                color: #1a73e8;
+                margin-bottom: 15px;
+            }
+
+            .instructions ul {
+                list-style-type: none;
+            }
+
+            .instructions li {
+                margin-bottom: 10px;
+                padding-left: 20px;
+                position: relative;
+            }
+
+            .instructions li:before {
+                content: "•";
+                color: #1a73e8;
+                position: absolute;
+                left: 0;
+            }
+
+            .controls button {
+                padding: 8px 15px;
+                border: none;
+                border-radius: 5px;
+                background: #1a73e8;
+                color: white;
+                cursor: pointer;
+                font-weight: 500;
+            }
+
+            .controls button:hover {
+                background: #1557b0;
+            }
+
+            .controls button.danger {
+                background: #dc3545;
+            }
+
+            .controls button.danger:hover {
+                background: #bb2d3b;
+            }
+
+            #output {
+                font-size: 18px;
+                line-height: 1.5;
+                margin-top: 10px;
+            }
+        </style>
+
+        
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h1>Sign Language Detection</h1>
+                <div class="controls">
+                    <select class="model-selector" id="modelSelect">
+                        <option value="asl">American Sign Language (ASL)</option>
+                        <option value="kannada">Kannada Sign Language</option>
+                    </select>
+                    <div class="status active" id="statusIndicator">Model Active</div>
+                    <button onclick="clearText()">Clear Text</button>
+                    <button class="danger" onclick="stopDetection()">Stop Detection</button>
+                    <button onclick="testCamera()" class="debug-button">Test Camera</button>
+
+                </div>
+            </div>
+
+            <div class="main-content">
+                <div class="video-container">
+                    <video id="videoElement" 
+       autoplay 
+       playsinline
+       muted
+       width="640"
+       height="480"></video>
+
+                    <div class="detection-text">
+                        <strong>Detected Text:</strong>
+                        <div id="output"></div>
+                    </div>
+                </div>
+
+                <div class="instructions">
+                    <h2>Instructions</h2>
+                    <ul>
+                        <li>Show hand signs clearly in front of the camera</li>
+                        <li>Hold a sign steady for 1 second to register</li>
+                        <li>Add space between words by:
+                            <ul>
+                                <li>Removing hands for 1.5s</li>
+                                <li>Showing two hands briefly</li>
+                                <li>Pressing spacebar</li>
+                            </ul>
+                        </li>
+                        <li>Press 'Backspace' to delete last character</li>
+                        <li>Click 'Clear Text' to start over</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            let videoElement = document.getElementById('videoElement');
+            let outputDiv = document.getElementById('output');
+            let modelSelect = document.getElementById('modelSelect');
+            let statusIndicator = document.getElementById('statusIndicator');
+            let currentText = '';
+            let ws = null;
+        
+            // Start video stream
+            // Add these helper functions
+// Add these helper functions
+function handleVideoError(error) {
+    console.error("Video Error:", error);
+    statusIndicator.textContent = `Camera Error: ${error.message}`;
+    statusIndicator.className = "status inactive";
+}
+
+function checkVideoStream(stream) {
+    const tracks = stream.getVideoTracks();
+    if (tracks.length === 0) {
+        throw new Error("No video tracks found in stream");
+    }
+    console.log("Video track settings:", tracks[0].getSettings());
+    return stream;
+}
+
+// Modified video initialization
+async function startVideo() {
+    try {
+        // First check if video element exists
+        if (!videoElement) {
+            throw new Error("Video element not found in DOM");
+        }
+
+        // Log initial video element state
+        console.log("Initial video element state:", {
+            width: videoElement.width,
+            height: videoElement.height,
+            videoWidth: videoElement.videoWidth,
+            videoHeight: videoElement.videoHeight
+        });
+
+        // Request camera with specific constraints
+        const constraints = {
+            video: {
+                width: { ideal: 640 },
+                height: { ideal: 480 },
+                facingMode: "user"
+            }
+        };
+
+        const stream = await navigator.mediaDevices.getUserMedia(constraints)
+            .then(checkVideoStream)
+            .catch(error => {
+                throw new Error(`Failed to get user media: ${error.message}`);
+            });
+
+        // Set the stream to video element
+        videoElement.srcObject = stream;
+        
+        // Add loadedmetadata event handler
+        videoElement.onloadedmetadata = () => {
+            console.log("Video metadata loaded:", {
+                width: videoElement.width,
+                height: videoElement.height,
+                videoWidth: videoElement.videoWidth,
+                videoHeight: videoElement.videoHeight
+            });
+            videoElement.play().catch(handleVideoError);
+        };
+
+        // Add play event handler
+        videoElement.onplay = () => {
+            console.log("Video started playing");
+            setInterval(sendVideoFrame, 100);
+        };
+
+        // Add error event handler
+        videoElement.onerror = (e) => {
+            handleVideoError(new Error(`Video element error: ${videoElement.error.message}`));
+        };
+
+        statusIndicator.textContent = "Camera Active";
+        statusIndicator.className = "status active";
+
+    } catch (err) {
+        handleVideoError(err);
+    }
+}
+
+// Add visibility change handling
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        console.log("Page hidden, checking video state");
+    } else {
+        console.log("Page visible, checking video state");
+        if (videoElement && !videoElement.srcObject) {
+            console.log("Video stream lost, attempting to restart");
+            startVideo();
+        }
+    }
+});
+            // Modify the WebSocket connection code:
+            function connectWebSocket() {
+                console.log('Attempting to connect to WebSocket...');
+                ws = new WebSocket('ws://localhost:8765');
+                
+                ws.onopen = () => {
+                    console.log('Successfully connected to server');
+                    statusIndicator.textContent = "Model Active";
+                    statusIndicator.className = "status active";
+                };
+                
+                ws.onmessage = (event) => {
+                    console.log('Received message from server:', event.data);
+                    const data = JSON.parse(event.data);
+                    if (data.text !== undefined) {
+                        currentText = data.text;
+                        outputDiv.textContent = currentText;
+                    }
+                };
+                
+                ws.onerror = (error) => {
+                    console.error('WebSocket error:', error);
+                    statusIndicator.textContent = "Connection Error";
+                    statusIndicator.className = "status inactive";
+                };
+                
+                ws.onclose = () => {
+                    console.log('Disconnected from server');
+                    statusIndicator.textContent = "Model Inactive";
+                    statusIndicator.className = "status inactive";
+                    setTimeout(connectWebSocket, 1000);
+                };
+            }
+
+            // Modify the video frame sending function:
+            function sendVideoFrame() {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    try {
+                        const canvas = document.createElement('canvas');
+                        canvas.width = videoElement.videoWidth;
+                        canvas.height = videoElement.videoHeight;
+                        
+                        if (canvas.width === 0 || canvas.height === 0) {
+                            console.error('Invalid video dimensions:', 
+                                        canvas.width, canvas.height);
+                            return;
+                        }
+                        
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(videoElement, 0, 0);
+                        const base64Frame = canvas.toDataURL('image/jpeg').split(',')[1];
+                        
+                        ws.send(JSON.stringify({
+                            frame: base64Frame
+                        }));
+                    } catch (error) {
+                        console.error('Error sending video frame:', error);
+                    }
+                } else {
+                    console.log('WebSocket not ready:', 
+                                ws ? ws.readyState : 'No WebSocket');
+                }
+            }
+        
+            // Initialize WebSocket connection
+            function connectWebSocket() {
+                ws = new WebSocket('ws://localhost:8765');
+                
+                ws.onopen = () => {
+                    console.log('Connected to server');
+                    statusIndicator.textContent = "Model Active";
+                    statusIndicator.className = "status active";
+                };
+                
+                ws.onmessage = (event) => {
+                    const data = JSON.parse(event.data);
+                    if (data.text !== undefined) {
+                        currentText = data.text;
+                        outputDiv.textContent = currentText;
+                    }
+                };
+                
+                ws.onclose = () => {
+                    console.log('Disconnected from server');
+                    statusIndicator.textContent = "Model Inactive";
+                    statusIndicator.className = "status inactive";
+                    setTimeout(connectWebSocket, 1000); // Reconnect after 1 second if disconnected
+                };
+            }
+        
+            // Clear the displayed text
+            function clearText() {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ command: 'clear' }));
+                }
+                currentText = '';
+                outputDiv.textContent = currentText;
+            }
+        
+            // Stop detection and close WebSocket
+            function stopDetection() {
+                if (ws) {
+                    ws.close();
+                }
+                const stream = videoElement.srcObject;
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                }
+                videoElement.srcObject = null;
+                statusIndicator.textContent = "Detection Stopped";
+                statusIndicator.className = "status inactive";
+            }
+        
+            // Switch model on dropdown change
+            modelSelect.addEventListener('change', function() {
+                if (ws && ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({ 
+                        command: 'switch_model', 
+                        model: this.value 
+                    }));
+                }
+            });
+        
+            // Handle keydown events for space and backspace
+            document.addEventListener('keydown', function(event) {
+                if (event.key === ' ' || event.key === 'Backspace') {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ 
+                            command: event.key === ' ' ? 'space' : 'backspace' 
+                        }));
+                    }
+                    event.preventDefault();
+                }
+            });
+            async function testCamera() {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    console.log("Camera test successful:", stream.getVideoTracks()[0].getSettings());
+                    stream.getTracks().forEach(track => track.stop());
+                    alert("Camera is working! Check console for details.");
+                } catch (error) {
+                    console.error("Camera test failed:", error);
+                    alert("Camera test failed: " + error.message);
+                }
+            }
+        
+            // Start video and WebSocket connection
+            startVideo();
+            connectWebSocket();
+        </script>
+        
+    </body>
+    </html>
